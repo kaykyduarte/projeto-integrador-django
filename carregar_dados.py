@@ -1,33 +1,37 @@
+import os
+
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "meu_projeto.settings")
+
+import django
+django.setup()
+
 import pandas as pd
-import sqlite3
+from django.conf import settings
+from django.db import connection, transaction
 
-df = pd.read_csv("dados/IBGE_populacaobrasil_2025.csv")
+df = pd.read_csv(
+    settings.BASE_DIR / "dados" / "IBGE_populacaobrasil_2025.csv"
+)
 
-df["populacao"] = df["populacao"].str.replace(".", "", regex=False).astype(int)
+df["populacao"] = (
+    df["populacao"]
+    .astype(str)
+    .str.replace(".", "", regex=False)
+    .astype(int)
+)
 
-colunas = ['estado', 'uf', 'regiao', 'populacao', 'ano']
+colunas = ["estado", "uf", "regiao", "populacao", "ano"]
 registros = list(df[colunas].itertuples(index=False, name=None))
-
-conexao = sqlite3.connect("db.sqlite3")
-cursor = conexao.cursor()
 
 sql_insert = """
 INSERT INTO populacao_estados (
-    estado,
-    uf,
-    regiao,
-    populacao,
-    ano
+    estado, uf, regiao, populacao, ano
 )
-VALUES (?, ?, ?, ?, ?);
+VALUES (%s, %s, %s, %s, %s);
 """
 
-try:
-    cursor.executemany(sql_insert, registros)
-    conexao.commit()
-    print(f"{len(registros)} registros inseridos.")
-except Exception:
-    conexao.rollback()
-    raise
-finally:
-    conexao.close()
+with transaction.atomic():
+    with connection.cursor() as cursor:
+        cursor.executemany(sql_insert, registros)
+
+print(f"{len(registros)} registros inseridos.")
